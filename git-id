@@ -1,0 +1,302 @@
+#!/usr/bin/env bash
+# vim: set tabstop=4 expandtab shiftwidth=4 bg=dark:
+# vim: set textwidth=80:
+#
+#============================================================================
+# File: git-id
+# Description: manage Git user identities for the current session
+#
+# Author   : Kilian CAVALOTTI <kilian@stanford.edu>
+#
+# Created  : 2015/08/11
+#============================================================================
+
+# -- environment setup ------------------------------------------------------
+
+# check if the current script has been sourced or executed
+[[ "$0" != "$BASH_SOURCE" ]] && sourced=1 || sourced=0
+# get script name and path
+script_name=$(basename ${BASH_SOURCE[0]})
+script_path=$(readlink -m ${BASH_SOURCE[0]})
+
+
+# -- functions --------------------------------------------------------------
+
+# this function is exported in the user environment and embeds all available
+# actions
+git-id() {
+
+    usage() {
+        cat << EOU
+$script_name: manage Git user identities
+
+Actions: add        add a new identity, or update an existing one
+         delete     remove an existing identity
+         list       list existing identities
+         show       show identity info
+         current    display current identity
+         use        use the selected identity 
+         reset      unset the environment, reset to the default id
+         help       this message
+
+Usage: $script_name add    <username> <full name> <email> <sshkey>
+       $script_name delete <username>
+       $script_name list
+       $script_name show   <username>
+       $script_name current
+       $script_name use    <username>
+       $script_name reset
+       $script_name help
+
+NB: when invoked without any parameters, acts as a command to use in GIT_SSH
+EOU
+        return 0
+    }
+
+    ## git functions -------------------------------------------------------- 
+
+    # sanity check: verify that Git is installed, and that we can access a 
+    # repo's local git config
+    git_sanity_check() {
+        type git &>/dev/null || {
+            echo "Really? Git is not even installed?"
+            return 1
+        }
+
+        git rev-parse --show-toplevel &>/dev/null || {
+            echo "The current directory doesn't seem to be part of a Git repository."
+            return 1
+        }
+    }
+
+    # lookup key in gitconfig identity namespace
+    # @input    $1: identity 
+    #           $2: key (name, email...)
+    # @output   value
+    lookup() {
+        local id="$1"
+        local key="$2"
+
+        git config -z "identity.$id.$key"
+    }
+
+    ## actions --------------------------------------------------------------
+
+    # add a new (or update an exiting) identity to the list of identities for
+    # the current repository
+    # @input    $1: identity
+    #           $2: full name (quoted if needed)
+    #           $3: email address
+    #           $4: path to the SSH key to be used with that id
+    # @output:  status message
+    add_id() {
+        local id="$1"
+        local name="$2"
+        local email="$3"
+        local sshkey="$4"
+
+        # check if id already exists
+        lookup $id name &>/dev/null \
+            && actioned="updated" \
+            || actioned="created"
+
+        # check if sshkey exists
+        [[ ! -r $sshkey ]] && {
+            echo "error: can't read SSH key $sshkey"
+            return 1
+        }
+        # check if $sshkey is a valid private key
+        head -n1 "$sshkey" | grep -q "PRIVATE KEY" || {
+            echo "error: $sshkey doesn't appear to be a valid SSH private key." 
+            return 1
+        }
+
+        # store the indentity in the local git config
+        {   git config identity."$id".name "$name"
+            git config identity."$id".email "$email"
+            git config identity."$id".sshkey "$sshkey" 
+        } && echo "success: identity $id $actioned."
+    }
+
+    # remove an identity from the list of identities for the current repository
+    # @input    $1: identity
+    # @output   status message
+    remove_id() {
+        local id="$1"
+        
+        # check if id already exists
+        lookup $id name &>/dev/null || {
+            echo "error: identity $id does not exist."
+            return 1
+        }
+
+        git config --remove-section identity."$id" \
+            && echo "success: identity $id removed."
+    }
+
+    # list existing identities for the current repository
+    # @input    n/a
+    # @output   sorted list of identities
+    list_ids() {
+        git config --get-regexp ^identity\. | cut -d. -f2 | sort -u
+    }
+
+    # display identity details
+    # @input    $1: identity
+    # @output   id name, email, sshkey
+    show_id() {
+        local id="$1"
+        local   name="$(lookup $id name)"
+        local  email="$(lookup $id email)"
+        local sshkey="$(lookup $id sshkey)"
+        
+        echo "[$id]"
+        echo "   name: $name"
+        echo "  email: $email"   
+        echo "ssh key: $sshkey"
+    }
+
+    # set environment to use specific identity
+    # @input    $1: identity
+    # @output:  status message
+    use_id() {
+        local id=$1
+        local   name="$(lookup $id name)"
+        local  email="$(lookup $id email)"
+        local sshkey="$(lookup $id sshkey)"
+
+        # check if identity already set
+        [[ -n $GIT_ID ]] && \
+            echo "switching Git id from $GIT_ID to $id" || \
+            echo "using identity: $id"
+
+        # set the environment
+        export GIT_ID="$id"
+        export GIT_SSH_KEY="$sshkey"
+        export GIT_AUTHOR_NAME="$name"
+        export GIT_AUTHOR_EMAIL="$email"
+        export GIT_COMMITTER_NAME="$name"
+        export GIT_COMMITTER_EMAIL="$email"
+
+        # set GIT_SSH to this very script
+        export GIT_SSH=$script_path
+    }
+
+    # list existing identities for the current repository
+    # @input    n/a
+    # @output   sorted list of identities
+    list_ids() {
+        git config --get-regexp ^identity\. | cut -d. -f2 | sort -u
+    }
+
+    # read current identitiy from the environment
+    # @input    n/a
+    # @output   current identity    
+    current_id() {
+        local id=$GIT_ID
+        
+        [[ $id == "" ]] && {
+            echo "error: identity not set"
+            return 1 
+        } || echo "$id"
+    }
+
+    # reset environment
+    # @input    n/a
+    # @output   status message
+    reset() {
+        # unset variables
+        unset GIT_ID
+        unset GIT_SSH_KEY
+        unset GIT_AUTHOR_NAME
+        unset GIT_AUTHOR_EMAIL
+        unset GIT_COMMITTER_NAME
+        unset GIT_COMMITTER_EMAIL
+        unset GIT_SSH
+        echo "environment unset"
+    }
+
+    # function called when the script is executed (not sourced) and used from
+    # the GIT_SSH env variable. Used to specify different SSH key when
+    # pulling/pushing to Git remotes.
+    # Directly executed by Git, so no input/output interaction
+    git_ssh() {
+        ssh -i $GIT_SSH_KEY $@
+    }
+
+
+
+    # -- main ---------------------------------------------------------------
+
+    # get action from the command line arguments
+    action="${1:-}"
+
+    git_sanity_check || return 1
+
+    case $action in
+        add)
+            shift
+            [[ $# == 4 ]] || {
+                usage
+                return 1
+            } && add_id "$1" "$2" "$3" "$4" 
+            ;;
+        delete|remove)
+            shift
+            [[ $# == 1 ]] && \
+                remove_id "$1" || {
+                usage
+                return 1
+            }
+            ;;
+        list) 
+            list_ids 
+            ;;
+        show)
+            shift
+            [[ $# == 1 ]] && \
+                show_id "$1" || {
+                usage
+                return 1
+            }
+            ;;
+        current) 
+            current_id 
+            ;;
+        use) 
+            shift
+            [[ $# == 1 ]] && {
+                [[ $sourced == 1 ]] && use_id "$1" || {
+                    echo -n "error: identity cannot be set by executing the "
+                    echo -n "script directly, you need to source the script "
+                    echo "and call the function instead ('git-id use $1')" 
+                }
+            } || {
+                usage
+                return 1
+            }
+            ;;
+        reset)
+            reset
+            return 1
+            ;;
+        *@*|*.*)  
+            # anything like user@host.tld means we're being used as GIT_SSH
+            git_ssh $@
+            ;; 
+        help|*)
+            usage
+            return 1
+            ;;
+    esac
+
+}
+
+# -- excution entry point ---------------------------------------------------
+
+# if executed directly, pass the arguments to the correct function
+[[ $sourced == 0 ]] &&
+    git-id $@
+
+## returns if script is sourced, or exits if it's executed
+return 2>/dev/null || exit
