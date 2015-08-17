@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # vim: set tabstop=4 expandtab shiftwidth=4 bg=dark:
 # vim: set textwidth=80:
+#==============================================================================
 #
-#============================================================================
-# File: git-id
-# Description: manage Git user identities for the current session
+# File        : git-id
+# Description : manage Git user identities for the current session
 #
-# Author   : Kilian CAVALOTTI <kilian@stanford.edu>
+# Copyright (c) 2015, Kilian Cavalotti <kilian@stanford.edu>
 #
-# Created  : 2015/08/11
-#============================================================================
+# Licensed under the GNU General Public License, v2
+#==============================================================================
 
-# -- environment setup ------------------------------------------------------
+
+# -- environment setup --------------------------------------------------------
 
 # check if the current script has been sourced or executed
 [[ "$0" != "$BASH_SOURCE" ]] && sourced=1 || sourced=0
@@ -20,7 +21,7 @@ script_name=$(basename ${BASH_SOURCE[0]})
 script_path=$(readlink -m ${BASH_SOURCE[0]})
 
 
-# -- functions --------------------------------------------------------------
+# -- functions ----------------------------------------------------------------
 
 # this function is exported in the user environment and embeds all available
 # actions
@@ -53,7 +54,7 @@ EOU
         return 0
     }
 
-    ## git functions -------------------------------------------------------- 
+    ## git functions ---------------------------------------------------------- 
 
     # sanity check: verify that Git is installed, and that we can access a 
     # repo's local git config
@@ -64,7 +65,7 @@ EOU
         }
 
         git rev-parse --show-toplevel &>/dev/null || {
-            echo "The current directory doesn't seem to be part of a Git repository."
+            echo "The current directory doesn't seem to be part of a Git repo."
             return 1
         }
     }
@@ -80,7 +81,7 @@ EOU
         git config -z "identity.$id.$key"
     }
 
-    ## actions --------------------------------------------------------------
+    ## actions ----------------------------------------------------------------
 
     # add a new (or update an exiting) identity to the list of identities for
     # the current repository
@@ -226,7 +227,7 @@ EOU
 
 
 
-    # -- main ---------------------------------------------------------------
+    # -- main -----------------------------------------------------------------
 
     # get action from the command line arguments
     action="${1:-}"
@@ -292,7 +293,7 @@ EOU
 
 }
 
-# -- excution entry point ---------------------------------------------------
+# -- excution entry point -----------------------------------------------------
 
 # if executed directly, pass the arguments to the correct function
 [[ $sourced == 0 ]] &&
