@@ -221,8 +221,11 @@ EOU
     # the GIT_SSH env variable. Used to specify different SSH key when
     # pulling/pushing to Git remotes.
     # Directly executed by Git, so no input/output interaction
+    # Needs to return 0, otherwise git may receive a SIGPIPE and display errors
+    # like "failed to push some refs"
     git_ssh() {
         ssh -i $GIT_SSH_KEY $@
+        exit 0
     }
 
 
