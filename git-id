@@ -162,6 +162,14 @@ EOU
     # @output:  status message
     use_id() {
         local id=$1
+
+        # check if id exists
+        lookup $id name &>/dev/null || {
+            echo "$id is not defined"
+            return 1
+        }
+
+        # get id details
         local   name="$(lookup $id name)"
         local  email="$(lookup $id email)"
         local sshkey="$(lookup $id sshkey)"
@@ -270,11 +278,13 @@ EOU
         use) 
             shift
             [[ $# == 1 ]] && {
-                [[ $sourced == 1 ]] && use_id "$1" || {
+                [[ $sourced == 1 ]] || {
                     echo -n "error: identity cannot be set by executing the "
                     echo -n "script directly, you need to source the script "
                     echo "and call the function instead ('git-id use $1')" 
+                    return 1
                 }
+                use_id "$1" || return 1
             } || {
                 usage
                 return 1
