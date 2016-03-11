@@ -20,7 +20,7 @@ portable script.
 
 
 ### Rationale
-git-id aims to solve a particular problem with a specific Git use case, but may 
+git-id aims to solve a particular problem with a specific Git use-case, but may 
 come handy in other situations too. 
 
 I sometimes have to share a user account with other people, and we all contribute to the
@@ -29,16 +29,16 @@ retain original authorship for our contributions, and cloning our own copy of
 the tree is not practical.
 So I've been looking for a way to switch identities before committing and
 pushing Git modifications. I've found some tools and wrappers, but none of them
-fulfilled those requirements. I need that tool to:
+fulfilled those requirements. I needed that tool to:
 * manage SSH keys (for pushes to GitHub, each user must have a separate key),
 * not modify the filesystem (for file-based configuration such as `$HOME/.gitconfig`), 
 since several users may need to work on the tree simultaneously, under the same identity (same `$HOME`),
 * not launch daemons or create temporary files that could survive a shell session,
 
 So here comes `git-id`. It's a Bash script that can be sourced in a user 
-environment, and that provides command to manage Git identities. It will define 
+environment, and that provides commands to manage Git identities. It will define 
 and set environment variables so one can choose the name under which commits 
-will be logged, and the SSH key that will be used for pushes/pulls.
+will be logged, as well as the SSH key that will be used for pushes/pulls.
 
 
 ## Installation
@@ -76,14 +76,16 @@ fatal: The remote end hung up unexpectedly
 
 $ git-id add john "John Doe" john@example.com /home/jdoe/.ssh/id_rsa
 success: identity john added.
+$ git-id current
+error: identity not set
 $ git-id use john
+$ git-id current
+john
 $ git-id show john
 [john]
    name: John Doe
   email: john@example.com
 ssh key: /home/jdoe/.ssh/id_rsa
-$ git-id current
-john
 $ git pull
 Already up-to-date.
 ```
