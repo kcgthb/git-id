@@ -13,12 +13,11 @@
 
 
 # -- environment setup --------------------------------------------------------
-
 # check if the current script has been sourced or executed
-[[ "$0" != "$BASH_SOURCE" ]] && sourced=1 || sourced=0
+[[ "$0" != "$BASH_SOURCE" ]] && gitid_sourced=1 || gitid_sourced=0
 # get script name and path
-script_name=$(basename ${BASH_SOURCE[0]})
-script_path=$(readlink -m ${BASH_SOURCE[0]})
+gitid_path=$(readlink -m ${BASH_SOURCE[0]})
+gitid_name=${gitid_path##*/}
 
 
 # -- functions ----------------------------------------------------------------
@@ -29,34 +28,32 @@ git-id() {
 
     usage() {
         cat << EOU
-$script_name: manage Git user identities
+$gitid_name: manage Git user identities
 
 Actions: add        add a new identity, or update an existing one
          delete     remove an existing identity
          list       list existing identities
          show       show identity info
          current    display current identity
-         use        use the selected identity 
+         use        use the selected identity
          reset      unset the environment, reset to the default id
          help       this message
 
-Usage: $script_name add    <username> <full name> <email> <sshkey>
-       $script_name delete <username>
-       $script_name list
-       $script_name show   <username>
-       $script_name current
-       $script_name use    <username>
-       $script_name reset
-       $script_name help
-
-NB: when invoked without any parameters, acts as a command to use in GIT_SSH
+Usage: $gitid_name add    <username> <full name> <email> <s:sshkey>|<t:token>
+       $gitid_name delete <username>
+       $gitid_name list
+       $gitid_name show   <username>
+       $gitid_name current
+       $gitid_name use    <username>
+       $gitid_name reset
+       $gitid_name help
 EOU
         return 0
     }
 
-    ## git functions ---------------------------------------------------------- 
+    ## git functions ----------------------------------------------------------
 
-    # sanity check: verify that Git is installed, and that we can access a 
+    # sanity check: verify that Git is installed, and that we can access a
     # repo's local git config
     git_sanity_check() {
         type git &>/dev/null || {
@@ -71,7 +68,7 @@ EOU
     }
 
     # lookup key in gitconfig identity namespace
-    # @input    $1: identity 
+    # @input    $1: identity
     #           $2: key (name, email...)
     # @output   value
     lookup() {
@@ -124,7 +121,7 @@ EOU
     # @output   status message
     remove_id() {
         local id="$1"
-        
+
         # check if id already exists
         lookup $id name &>/dev/null || {
             echo "error: identity $id does not exist."
@@ -200,13 +197,13 @@ EOU
 
     # read current identitiy from the environment
     # @input    n/a
-    # @output   current identity    
+    # @output   current identity
     current_id() {
         local id=$GIT_ID
-        
+
         [[ $id == "" ]] && {
             echo "error: identity not set"
-            return 1 
+            return 1
         } || echo "$id"
     }
 
@@ -261,27 +258,28 @@ EOU
                 return 1
             }
             ;;
-        list) 
-            list_ids 
+        list)
+            list_ids
             ;;
         show)
             shift
-            [[ $# == 1 ]] && \
-                show_id "$1" || {
+            if [[ $# == 1 ]]; then
+                show_id "$1"
+            else
                 usage
                 return 1
-            }
+            fi
             ;;
-        current) 
-            current_id 
+        current)
+            current_id
             ;;
-        use) 
+        use)
             shift
             [[ $# == 1 ]] && {
-                [[ $sourced == 1 ]] || {
+                [[ $gitid_sourced == 1 ]] || {
                     echo -n "error: identity cannot be set by executing the "
                     echo -n "script directly, you need to source the script "
-                    echo "and call the function instead ('git-id use $1')" 
+                    echo "and call the function instead ('git-id use $1')"
                     return 1
                 }
                 use_id "$1" || return 1
@@ -309,7 +307,7 @@ EOU
 # -- excution entry point -----------------------------------------------------
 
 # if executed directly, pass the arguments to the correct function
-[[ $sourced == 0 ]] &&
+[[ $gitid_sourced == 0 ]] &&
     git-id $@
 
 ## returns if script is sourced, or exits if it's executed
