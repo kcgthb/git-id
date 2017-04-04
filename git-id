@@ -47,6 +47,15 @@ Usage: $gitid_name add    <username> <full name> <email> <s:sshkey>|<t:token>
        $gitid_name use    <username>
        $gitid_name reset
        $gitid_name help
+
+Notes:
+   1. a path to a SSH private key *or* an access token can be provided, but not
+      both, they're mutually exclusive.
+   2. The type of credential should be indicated with the "s:" (for SSH key) or
+      "t:" (for token) prefix.
+   3. when invoked without any parameters, git-id acts as a command to use in
+      GIT_SSH and/or GIT_ASKPASS
+
 EOU
         return 0
     }
@@ -85,34 +94,46 @@ EOU
     # @input    $1: identity
     #           $2: full name (quoted if needed)
     #           $3: email address
-    #           $4: path to the SSH key to be used with that id
+    #           $4: path to the SSH key to be used with that id, *OR*
+    #               access token
     # @output:  status message
     add_id() {
         local id="$1"
         local name="$2"
         local email="$3"
-        local sshkey="$4"
+        local cred="$4"
 
         # check if id already exists
         lookup $id name &>/dev/null \
             && actioned="updated" \
             || actioned="created"
 
-        # check if sshkey exists
-        [[ ! -r $sshkey ]] && {
-            echo "error: can't read SSH key $sshkey"
-            return 1
-        }
+        # check if cred is a file (sshkey) or not (token)
+        case ${cred%:*} in
+            s)  sshkey=${cred#*:}
+                ;;
+            t)  token=${cred#*:}
+                ;;
+            *)  echo "error: invalid credential type (should be s: or t:)"
+                return 1
+                ;;
+        esac
+
         # check if $sshkey is a valid private key
-        head -n1 "$sshkey" | grep -q "PRIVATE KEY" || {
-            echo "error: $sshkey doesn't appear to be a valid SSH private key." 
-            return 1
+        [[ -n ${sshkey:-} ]] && {
+            head -n1 "$sshkey" |& grep -q "PRIVATE KEY" || {
+                mesg="error: $sshkey doesn't appear to be a valid "
+                mesg+="SSH private key."
+                echo "$mesg"
+                return 1
+            }
         }
 
-        # store the indentity in the local git config
+        # store the identity in the local git config
         {   git config identity."$id".name "$name"
             git config identity."$id".email "$email"
-            git config identity."$id".sshkey "$sshkey" 
+            [[ -n ${sshkey:-} ]] && git config identity."$id".sshkey "$sshkey"
+            [[ -n ${token:-} ]]  && git config identity."$id".token "$token"
         } && echo "success: identity $id $actioned."
     }
 
@@ -141,17 +162,31 @@ EOU
 
     # display identity details
     # @input    $1: identity
-    # @output   id name, email, sshkey
+    # @output   id name, email, sshkey, token
     show_id() {
         local id="$1"
+
+        # check if id exists
+        lookup $id name &>/dev/null || {
+            echo "$id is not defined"
+            return 1
+        }
+
         local   name="$(lookup $id name)"
         local  email="$(lookup $id email)"
         local sshkey="$(lookup $id sshkey)"
-        
+        local  token="$(lookup $id token)"
+
+        [[ "$name" == "" ]] && {
+            echo "error: id doesn't exist"
+            return 1
+        }
+
         echo "[$id]"
         echo "   name: $name"
-        echo "  email: $email"   
-        echo "ssh key: $sshkey"
+        echo "  email: $email"
+        [[ -n ${sshkey:-} ]] && echo "ssh key: ${sshkey:-}" || true
+        [[ -n ${token:-} ]]  && echo "  token: ${token:-}"  || true
     }
 
     # set environment to use specific identity
@@ -170,6 +205,7 @@ EOU
         local   name="$(lookup $id name)"
         local  email="$(lookup $id email)"
         local sshkey="$(lookup $id sshkey)"
+        local  token="$(lookup $id token)"
 
         # check if identity already set
         [[ -n $GIT_ID ]] && \
@@ -178,14 +214,19 @@ EOU
 
         # set the environment
         export GIT_ID="$id"
-        export GIT_SSH_KEY="$sshkey"
         export GIT_AUTHOR_NAME="$name"
         export GIT_AUTHOR_EMAIL="$email"
         export GIT_COMMITTER_NAME="$name"
         export GIT_COMMITTER_EMAIL="$email"
 
-        # set GIT_SSH to this very script
-        export GIT_SSH=$script_path
+        # set GIT_SSH to this very script if we have a ssh key
+        [[ -n ${sshkey:-} ]] && {
+            export GIT_SSH=$gitid_path
+        }
+        # set GIT_ASKPASS to this very script if we have a token
+        [[ -n ${token:-} ]]  && {
+            export GIT_ASKPASS=$gitid_path
+        }
     }
 
     # list existing identities for the current repository
@@ -213,7 +254,6 @@ EOU
     reset() {
         # unset variables
         unset GIT_ID
-        unset GIT_SSH_KEY
         unset GIT_AUTHOR_NAME
         unset GIT_AUTHOR_EMAIL
         unset GIT_COMMITTER_NAME
@@ -229,10 +269,30 @@ EOU
     # Needs to return 0, otherwise git may receive a SIGPIPE and display errors
     # like "failed to push some refs"
     git_ssh() {
-        ssh -i $GIT_SSH_KEY $@
+        local id=$GIT_ID
+
+        ssh -i $(lookup $id sshkey) $@
         exit 0
     }
 
+    # function called when the script is executed (not sourced) and used from
+    # the GIT_ASKPASS env variable. Used to provide username and password
+    # pulling/pushing to Git remotes.
+    # Directly executed by Git, so no input/output interaction
+    # Needs to return 0, otherwise git may receive a SIGPIPE and display errors
+    # like "failed to push some refs"
+    # @input    $1: "Username" or "Password"
+    # @output   requested information
+    git_askpass() {
+        local action=$1
+        local id=$GIT_ID
+
+        case $action in
+            Username) echo $id ;;
+            Password) lookup $id token ;;
+        esac
+        exit 0
+    }
 
 
     # -- main -----------------------------------------------------------------
@@ -248,7 +308,7 @@ EOU
             [[ $# == 4 ]] || {
                 usage
                 return 1
-            } && add_id "$1" "$2" "$3" "$4" 
+            } && add_id "$1" "$2" "$3" "$4"
             ;;
         delete|remove)
             shift
@@ -292,10 +352,15 @@ EOU
             reset
             return 1
             ;;
-        *@*|*.*)  
+        Username*|Password*)
+            # getting a Username/Password prompt means we're being used as
+            # GIT_ASKPASS, return username and token
+            git_askpass $action
+            ;;
+        *@*|*.*)
             # anything like user@host.tld means we're being used as GIT_SSH
             git_ssh $@
-            ;; 
+            ;;
         help|*)
             usage
             return 1
