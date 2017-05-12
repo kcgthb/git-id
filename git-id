@@ -259,6 +259,7 @@ EOU
         unset GIT_COMMITTER_NAME
         unset GIT_COMMITTER_EMAIL
         unset GIT_SSH
+        unset GIT_ASKPASS
         echo "environment unset"
     }
 
