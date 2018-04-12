@@ -251,7 +251,7 @@ EOU
     # reset environment
     # @input    n/a
     # @output   status message
-    reset() {
+    env_reset() {
         # unset variables
         unset GIT_ID
         unset GIT_AUTHOR_NAME
@@ -350,7 +350,7 @@ EOU
             }
             ;;
         reset)
-            reset
+            env_reset
             return 1
             ;;
         Username*|Password*)
