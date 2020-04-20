@@ -84,7 +84,7 @@ EOU
         local id="$1"
         local key="$2"
 
-        git config -z "identity.$id.$key"
+        git config -z "identity.$id.$key" | tr -d \\0
     }
 
     ## actions ----------------------------------------------------------------
