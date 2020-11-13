@@ -242,7 +242,7 @@ EOU
     # @input    n/a
     # @output   current identity
     current_id() {
-        local id=$GIT_ID
+        local id=${GIT_ID:-}
 
         [[ $id == "" ]] && {
             echo "error: identity not set"
@@ -274,7 +274,7 @@ EOU
     git_ssh() {
         local id=$GIT_ID
 
-        ssh -i "$(lookup "$id" sshkey)" "$@"
+        ssh -i "$(lookup "$id" sshkey)" $@
         exit 0
     }
 
@@ -363,7 +363,7 @@ EOU
             ;;
         *@*|*.*)
             # anything like user@host.tld means we're being used as GIT_SSH
-            git_ssh "$@"
+            git_ssh $@
             ;;
         help|*)
             usage
@@ -376,7 +376,7 @@ EOU
 # -- excution entry point -----------------------------------------------------
 
 # if executed directly, pass the arguments to the correct function
-if [[ $gitid_sourced == 0 ]]; then git-id "$@"; fi
+if [[ $gitid_sourced == 0 ]]; then git-id $@; fi
 
 ## returns if script is sourced, or exits if it's executed
 return 2>/dev/null || exit
