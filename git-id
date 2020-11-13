@@ -14,9 +14,9 @@
 
 # -- environment setup --------------------------------------------------------
 # check if the current script has been sourced or executed
-[[ "$0" != "$BASH_SOURCE" ]] && gitid_sourced=1 || gitid_sourced=0
+[[ "$0" != "${BASH_SOURCE[0]}" ]] && gitid_sourced=1 || gitid_sourced=0
 # get script name and path
-gitid_path=$(readlink -m ${BASH_SOURCE[0]})
+gitid_path=$(readlink -m "${BASH_SOURCE[0]}")
 gitid_name=${gitid_path##*/}
 
 
@@ -104,7 +104,7 @@ EOU
         local cred="$4"
 
         # check if id already exists
-        lookup $id name &>/dev/null \
+        lookup "$id" name &>/dev/null \
             && actioned="updated" \
             || actioned="created"
 
@@ -144,7 +144,7 @@ EOU
         local id="$1"
 
         # check if id already exists
-        lookup $id name &>/dev/null || {
+        lookup "$id" name &>/dev/null || {
             echo "error: identity $id does not exist."
             return 1
         }
@@ -165,17 +165,18 @@ EOU
     # @output   id name, email, sshkey, token
     show_id() {
         local id="$1"
+        local name email sshkey token
 
         # check if id exists
-        lookup $id name &>/dev/null || {
+        lookup "$id" name &>/dev/null || {
             echo "$id is not defined"
             return 1
         }
 
-        local   name="$(lookup $id name)"
-        local  email="$(lookup $id email)"
-        local sshkey="$(lookup $id sshkey)"
-        local  token="$(lookup $id token)"
+        name="$(lookup "$id" name)"
+        email="$(lookup "$id" email)"
+        sshkey="$(lookup "$id" sshkey)"
+        token="$(lookup "$id" token)"
 
         [[ "$name" == "" ]] && {
             echo "error: id doesn't exist"
@@ -185,8 +186,8 @@ EOU
         echo "[$id]"
         echo "   name: $name"
         echo "  email: $email"
-        [[ -n ${sshkey:-} ]] && echo "ssh key: ${sshkey:-}" || true
-        [[ -n ${token:-} ]]  && echo "  token: ${token:-}"  || true
+        if [[ -n ${sshkey:-} ]]; then echo "ssh key: ${sshkey:-}"; fi
+        if [[ -n ${token:-} ]];  then echo "  token: ${token:-}";  fi
     }
 
     # set environment to use specific identity
@@ -194,21 +195,22 @@ EOU
     # @output:  status message
     use_id() {
         local id=$1
+        local name email sshkey token
 
         # check if id exists
-        lookup $id name &>/dev/null || {
+        lookup "$id" name &>/dev/null || {
             echo "$id is not defined"
             return 1
         }
 
         # get id details
-        local   name="$(lookup $id name)"
-        local  email="$(lookup $id email)"
-        local sshkey="$(lookup $id sshkey)"
-        local  token="$(lookup $id token)"
+        name="$(lookup "$id" name)"
+        email="$(lookup "$id" email)"
+        sshkey="$(lookup "$id" sshkey)"
+        token="$(lookup "$id" token)"
 
         # check if identity already set
-        [[ -n $GIT_ID ]] && \
+        [[ -n ${GIT_ID:-} ]] && \
             echo "switching Git id from $GIT_ID to $id" || \
             echo "using identity: $id"
 
@@ -272,7 +274,7 @@ EOU
     git_ssh() {
         local id=$GIT_ID
 
-        ssh -i $(lookup $id sshkey) $@
+        ssh -i "$(lookup "$id" sshkey)" "$@"
         exit 0
     }
 
@@ -289,8 +291,8 @@ EOU
         local id=$GIT_ID
 
         case $action in
-            Username) echo $id ;;
-            Password) lookup $id token ;;
+            Username) echo "$id" ;;
+            Password) lookup "$id" token ;;
         esac
         exit 0
     }
@@ -313,11 +315,12 @@ EOU
             ;;
         delete|remove)
             shift
-            [[ $# == 1 ]] && \
-                remove_id "$1" || {
+            if [[ $# == 1 ]]; then
+                remove_id "$1"
+            else
                 usage
                 return 1
-            }
+            fi
             ;;
         list)
             list_ids
@@ -336,7 +339,7 @@ EOU
             ;;
         use)
             shift
-            [[ $# == 1 ]] && {
+            if [[ $# == 1 ]]; then
                 [[ $gitid_sourced == 1 ]] || {
                     echo -n "error: identity cannot be set by executing the "
                     echo -n "script directly, you need to source the script "
@@ -344,10 +347,10 @@ EOU
                     return 1
                 }
                 use_id "$1" || return 1
-            } || {
+            else
                 usage
                 return 1
-            }
+            fi
             ;;
         reset)
             env_reset
@@ -356,11 +359,11 @@ EOU
         Username*|Password*)
             # getting a Username/Password prompt means we're being used as
             # GIT_ASKPASS, return username and token
-            git_askpass $action
+            git_askpass "$action"
             ;;
         *@*|*.*)
             # anything like user@host.tld means we're being used as GIT_SSH
-            git_ssh $@
+            git_ssh "$@"
             ;;
         help|*)
             usage
@@ -373,8 +376,7 @@ EOU
 # -- excution entry point -----------------------------------------------------
 
 # if executed directly, pass the arguments to the correct function
-[[ $gitid_sourced == 0 ]] &&
-    git-id $@
+if [[ $gitid_sourced == 0 ]]; then git-id "$@"; fi
 
 ## returns if script is sourced, or exits if it's executed
 return 2>/dev/null || exit
