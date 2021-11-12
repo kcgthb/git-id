@@ -83,8 +83,10 @@ EOU
     lookup() {
         local id="$1"
         local key="$2"
+        local v
 
-        git config -z "identity.$id.$key" | tr -d \\0
+        v=$(git config -z "identity.$id.$key") || return 1
+        echo "$v" | tr -d \\0
     }
 
     ## actions ----------------------------------------------------------------
