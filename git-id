@@ -86,6 +86,7 @@ EOU
         local v
 
         v=$(git config "identity.$id.$key") || return 1
+        echo "$v"
     }
 
     ## actions ----------------------------------------------------------------
