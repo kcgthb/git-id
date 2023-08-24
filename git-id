@@ -85,8 +85,7 @@ EOU
         local key="$2"
         local v
 
-        v=$(git config -z "identity.$id.$key") || return 1
-        echo "$v" | tr -d \\0
+        v=$(git config "identity.$id.$key") || return 1
     }
 
     ## actions ----------------------------------------------------------------
